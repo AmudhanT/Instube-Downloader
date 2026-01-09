@@ -1,20 +1,17 @@
-name: Build Instube Fixed (Auto-Repair)
+name: Build Instube Final Fix
 on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # 1. கோட் எடுப்பது
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 2. ZIP ஃபைலை கையாளுதல்
       - name: Unzip Source Code
         run: |
           if [ -f "Instube-downloader.zip" ]; then
             unzip "Instube-downloader.zip"
-            # ஃபோல்டருக்குள் ஃபோல்டர் இருந்தால் வெளியே கொண்டு வா
             if [ -d "Instube-downloader" ]; then cp -r Instube-downloader/* .; fi
             if [ -d "Instube" ]; then cp -r Instube/* .; fi
           else
@@ -22,7 +19,6 @@ jobs:
             mkdir -p app
           fi
 
-      # 3. Java Setup
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -33,17 +29,14 @@ jobs:
         uses: android-actions/setup-android@v3
 
       # ========================================================
-      # STEP 4: CREATE MISSING GRADLE FILES (The Fix)
-      # gradlew ஃபைல் இல்லையென்றால் நாமே உருவாக்குவோம்
+      # STEP 4: GENERATE GRADLE WRAPPER (CORRECT VERSION)
+      # முக்கியமான மாற்றம்: இங்கே நாம் Version 8.2 ஐ கட்டாயப்படுத்துகிறோம்
       # ========================================================
-      - name: Generate Gradle Wrapper & Root Config
+      - name: Generate Gradle Wrapper 8.2
         run: |
-          # 1. Create settings.gradle (Links the app module)
           echo "include ':app'" > settings.gradle
           
-          # 2. Create Root build.gradle (Defines plugins)
           cat <<EOF > build.gradle
-          // Top-level build file
           buildscript {
               repositories {
                   google()
@@ -64,11 +57,11 @@ jobs:
           }
           EOF
 
-          # 3. Generate gradlew using system gradle
-          gradle wrapper
+          # FIX: Force Gradle 8.2 (Compatible with Android)
+          gradle wrapper --gradle-version 8.2
 
       # ========================================================
-      # STEP 5: INJECT APP MODULE FILES
+      # STEP 5: INJECT APP MODULE
       # ========================================================
       - name: Inject app/build.gradle
         run: |
@@ -116,7 +109,7 @@ jobs:
               <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
               <application
                   android:allowBackup="true"
-                  android:label="Instube Fixed"
+                  android:label="Instube"
                   android:theme="@style/Theme.MaterialComponents.Light.NoActionBar"
                   android:requestLegacyExternalStorage="true" 
                   android:usesCleartextTraffic="true">
@@ -131,7 +124,7 @@ jobs:
           EOF
 
       # ========================================================
-      # STEP 7: INJECT LAYOUT & JAVA
+      # STEP 7: INJECT UI & LOGIC
       # ========================================================
       - name: Inject UI & Logic
         run: |
@@ -147,15 +140,15 @@ jobs:
               android:orientation="vertical"
               android:gravity="center"
               android:padding="20dp">
-              <TextView android:text="Instube Fixed" android:textSize="24sp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
-              <EditText android:id="@+id/urlInput" android:hint="Paste Link" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp"/>
-              <Button android:id="@+id/downloadBtn" android:text="Download" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp"/>
+              <TextView android:text="Instube Downloader" android:textSize="24sp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+              <EditText android:id="@+id/urlInput" android:hint="Paste Link Here" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp"/>
+              <Button android:id="@+id/downloadBtn" android:text="Download Video" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp"/>
               <TextView android:id="@+id/statusText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp"/>
               <WebView android:id="@+id/webView" android:layout_width="1dp" android:layout_height="1dp" android:visibility="invisible"/>
           </LinearLayout>
           EOF
 
-          # JAVA
+          # JAVA LOGIC
           cat <<EOF > app/src/main/java/com/example/instube/MainActivity.java
           package com.example.instube;
           import android.app.Activity;
@@ -187,7 +180,7 @@ jobs:
                   setupWebView();
                   downloadBtn.setOnClickListener(v -> {
                       String url = urlInput.getText().toString();
-                      if(!url.isEmpty()) { statusText.setText("Checking..."); webView.loadUrl(url.startsWith("http") ? url : "https://"+url); }
+                      if(!url.isEmpty()) { statusText.setText("Processing..."); webView.loadUrl(url.startsWith("http") ? url : "https://"+url); }
                   });
               }
               private void setupWebView() {
@@ -216,7 +209,7 @@ jobs:
           EOF
 
       # ========================================================
-      # STEP 8: BUILD APK (இப்போது Error வராது)
+      # STEP 8: BUILD APK
       # ========================================================
       - name: Build Debug APK
         run: |
@@ -226,5 +219,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Instube-Fixed-APK
+          name: Instube-Final-APK
           path: app/build/outputs/apk/debug/app-debug.apk
