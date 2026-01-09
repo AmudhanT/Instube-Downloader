@@ -1,0 +1,326 @@
+name: Build Instube Ultimate (All Features)
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. ஆரம்ப செட்டப்
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 2. ZIP ஃபைலை கண்டுபிடித்து Unzip செய்தல்
+      - name: Unzip Source Code
+        run: |
+          if [ -f "Instube-downloader.zip" ]; then
+            unzip "Instube-downloader.zip"
+            # ஃபோல்டர் ஸ்ட்ரக்சர் மாறினாலும் சமாளிக்க:
+            if [ -d "Instube-downloader" ]; then cp -r Instube-downloader/* .; fi
+            if [ -d "Instube" ]; then cp -r Instube/* .; fi
+          else
+            echo "Zip file not found, creating empty project structure..."
+            mkdir -p app
+          fi
+
+      # 3. Java & Android Setup
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      # ========================================================
+      # STEP 4: GRADLE SETUP (Dependencies for Modern UI)
+      # ========================================================
+      - name: Inject app/build.gradle
+        run: |
+          mkdir -p app
+          cat <<EOF > app/build.gradle
+          plugins {
+              id 'com.android.application'
+          }
+          android {
+              namespace 'com.example.instube'
+              compileSdk 33
+              defaultConfig {
+                  applicationId "com.example.instube"
+                  minSdk 24
+                  targetSdk 33
+                  versionCode 1
+                  versionName "1.0 Pro"
+              }
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+                  }
+              }
+          }
+          dependencies {
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+              implementation 'com.google.android.material:material:1.9.0'
+              implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+          }
+          EOF
+
+      # ========================================================
+      # STEP 5: MANIFEST (Permissions & Hardware Acceleration)
+      # ========================================================
+      - name: Inject AndroidManifest.xml
+        run: |
+          mkdir -p app/src/main
+          cat <<EOF > app/src/main/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+              package="com.example.instube">
+              
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+              <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+
+              <application
+                  android:allowBackup="true"
+                  android:label="Instube Ultimate"
+                  android:theme="@style/Theme.MaterialComponents.Light.NoActionBar"
+                  android:requestLegacyExternalStorage="true" 
+                  android:usesCleartextTraffic="true"
+                  android:hardwareAccelerated="true">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:configChanges="orientation|screenSize|keyboardHidden">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+      # ========================================================
+      # STEP 6: PRO UI DESIGN (Layout)
+      # அழகான இன்புட் பாக்ஸ் மற்றும் ஸ்டேட்டஸ் பார்
+      # ========================================================
+      - name: Inject activity_main.xml
+        run: |
+          mkdir -p app/src/main/res/layout
+          cat <<EOF > app/src/main/res/layout/activity_main.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:orientation="vertical"
+              android:padding="24dp"
+              android:background="#FAFAFA"
+              android:gravity="center_vertical">
+
+              <TextView
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="Instube Pro"
+                  android:textSize="32sp"
+                  android:textStyle="bold"
+                  android:gravity="center"
+                  android:textColor="#E1306C"
+                  android:layout_marginBottom="10dp"/>
+
+              <TextView
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="Paste Instagram/Video Link to Download"
+                  android:gravity="center"
+                  android:textColor="#666666"
+                  android:layout_marginBottom="40dp"/>
+
+              <EditText
+                  android:id="@+id/urlInput"
+                  android:layout_width="match_parent"
+                  android:layout_height="60dp"
+                  android:background="#FFFFFF"
+                  android:elevation="4dp"
+                  android:padding="16dp"
+                  android:hint="https://instagram.com/..."
+                  android:textColor="#333333" />
+
+              <Button
+                  android:id="@+id/downloadBtn"
+                  android:layout_width="match_parent"
+                  android:layout_height="65dp"
+                  android:text="DOWNLOAD VIDEO"
+                  android:textSize="18sp"
+                  android:textStyle="bold"
+                  android:layout_marginTop="30dp"
+                  android:backgroundTint="#E1306C"
+                  android:textColor="#FFFFFF"/>
+                  
+              <TextView
+                  android:id="@+id/statusText"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="Waiting for link..."
+                  android:gravity="center"
+                  android:textSize="14sp"
+                  android:textColor="#888888"
+                  android:layout_marginTop="20dp"/>
+
+              <WebView
+                  android:id="@+id/webView"
+                  android:layout_width="1dp"
+                  android:layout_height="1dp"
+                  android:visibility="invisible"/>
+                  
+          </LinearLayout>
+          EOF
+
+      # ========================================================
+      # STEP 7: JAVA LOGIC (Smart Extraction Engine)
+      # Instagram Meta Tags மற்றும் Video Tags இரண்டையும் தேடும்
+      # ========================================================
+      - name: Inject MainActivity.java
+        run: |
+          mkdir -p app/src/main/java/com/example/instube
+          cat <<EOF > app/src/main/java/com/example/instube/MainActivity.java
+          package com.example.instube;
+
+          import android.app.Activity;
+          import android.app.DownloadManager;
+          import android.content.Context;
+          import android.net.Uri;
+          import android.os.Bundle;
+          import android.os.Environment;
+          import android.view.View;
+          import android.webkit.JavascriptInterface;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import android.widget.Button;
+          import android.widget.EditText;
+          import android.widget.TextView;
+          import android.widget.Toast;
+
+          public class MainActivity extends Activity {
+              
+              EditText urlInput;
+              Button downloadBtn;
+              TextView statusText;
+              WebView webView;
+
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  setContentView(R.layout.activity_main);
+
+                  urlInput = findViewById(R.id.urlInput);
+                  downloadBtn = findViewById(R.id.downloadBtn);
+                  statusText = findViewById(R.id.statusText);
+                  webView = findViewById(R.id.webView);
+
+                  setupSmartWebView();
+
+                  downloadBtn.setOnClickListener(new View.OnClickListener() {
+                      @Override
+                      public void onClick(View v) {
+                          String url = urlInput.getText().toString().trim();
+                          if (!url.isEmpty()) {
+                              if (!url.startsWith("http")) {
+                                  url = "https://" + url;
+                              }
+                              statusText.setText("Connecting to server...");
+                              statusText.setTextColor(0xFFE1306C); // Pink Color
+                              webView.loadUrl(url); 
+                          } else {
+                              Toast.makeText(MainActivity.this, "Paste a valid link!", Toast.LENGTH_SHORT).show();
+                          }
+                      }
+                  });
+              }
+
+              private void setupSmartWebView() {
+                  WebSettings settings = webView.getSettings();
+                  settings.setJavaScriptEnabled(true);
+                  settings.setDomStorageEnabled(true);
+                  // Mobile Agent Spoofing (Important for Insta)
+                  settings.setUserAgentString("Mozilla/5.0 (Linux; Android 13; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36");
+
+                  webView.addJavascriptInterface(new VideoInterface(), "InstubeBridge");
+
+                  webView.setWebViewClient(new WebViewClient() {
+                      @Override
+                      public void onPageFinished(WebView view, String url) {
+                          statusText.setText("Searching for video file...");
+                          
+                          // Smart Script: Checks Meta Tags first (Insta), then Video Tags (Generic)
+                          String jsScript = "javascript:(function() { " +
+                                  "   var videoUrl = ''; " +
+                                  "   var meta = document.querySelector('meta[property=\"og:video\"]'); " +
+                                  "   if (meta) { videoUrl = meta.content; } " +
+                                  "   else { " +
+                                  "       var vTag = document.getElementsByTagName('video')[0]; " +
+                                  "       if (vTag) { videoUrl = vTag.src; } " +
+                                  "   } " +
+                                  "   if (videoUrl) { InstubeBridge.foundVideo(videoUrl); } " +
+                                  "   else { InstubeBridge.noVideo(); } " +
+                                  "})()";
+                          
+                          webView.loadUrl(jsScript);
+                      }
+                  });
+              }
+
+              public class VideoInterface {
+                  @JavascriptInterface
+                  public void foundVideo(String vidUrl) {
+                      runOnUiThread(() -> {
+                          if (vidUrl != null && vidUrl.startsWith("http")) {
+                              statusText.setText("Video Found! Downloading...");
+                              statusText.setTextColor(0xFF008000); // Green
+                              startDownload(vidUrl);
+                          }
+                      });
+                  }
+
+                  @JavascriptInterface
+                  public void noVideo() {
+                      runOnUiThread(() -> {
+                          statusText.setText("No downloadable video found on this page.");
+                          statusText.setTextColor(0xFFFF0000); // Red
+                      });
+                  }
+              }
+
+              private void startDownload(String url) {
+                  try {
+                      DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
+                      request.setTitle("Instube Video");
+                      request.setDescription("Downloading...");
+                      request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                      request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "Instube_" + System.currentTimeMillis() + ".mp4");
+                      
+                      DownloadManager manager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+                      manager.enqueue(request);
+                      
+                      Toast.makeText(MainActivity.this, "Download Started! Check Notification.", Toast.LENGTH_LONG).show();
+                  } catch (Exception e) {
+                      Toast.makeText(MainActivity.this, "Error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                  }
+              }
+          }
+          EOF
+
+      # 8. APK Build
+      - name: Build Debug APK
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      # 9. Artifact Upload
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Instube-Ultimate-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
